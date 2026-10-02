@@ -1,0 +1,100 @@
+Talk_Project - build, test & debug
+==================================
+
+BUILD & RUN
+-----------
+First time only (downloads GoogleTest into build/_deps):
+
+    cd ~/Talk_Project
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+Every time after that:
+
+    cmake --build build -j4
+    ./build/talk_server
+
+-DCMAKE_BUILD_TYPE=Debug is what gives -g -O0, so gdb shows real variable
+values instead of <optimized out>. Always build Debug when debugging.
+
+TESTS
+-----
+    ctest --test-dir build --output-on-failure
+
+Or run the binary directly - more readable output:
+
+    ./build/tst/test_tasks
+    ./build/tst/test_tasks --gtest_filter='*Fifo*'
+    ./build/tst/test_tasks --gtest_list_tests     # list names, run nothing
+    ctest --test-dir build -R Fifo                # filter by name
+    ctest --test-dir build --rerun-failed         # only what failed last time
+
+Start over from scratch:
+
+    rm -rf build
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+VS CODE DEBUGGING
+-----------------
+Needs the C/C++ extension (ms-vscode.cpptools).
+
+    F5              start debugging (uses .vscode/launch.json)
+    F9              toggle breakpoint on the current line
+    F10             step over
+    F11             step into
+    Shift+F11       step out
+    Shift+F5        stop
+    Ctrl+Shift+F5   restart
+    Ctrl+Shift+B    build (the default build task)
+
+Launch configs in the dropdown at the top of the Run and Debug panel:
+    Debug talk_server               - breaks at the first line of main()
+    Debug test_tasks                - the whole test binary
+    Debug one test (prompts...)     - asks for a --gtest_filter
+    Attach to a hung process        - pick the PID when something is stuck
+
+Watch panel: click + and type an expression, e.g.  tasks.size()  or  stopped
+Variables panel shows locals automatically; pretty-printing is on, so a
+std::vector<char> shows its bytes rather than its internal pointers.
+Call Stack panel has a thread dropdown - use it when a worker thread is stuck.
+Debug Console accepts gdb commands if you prefix them with -exec, e.g.
+    -exec thread apply all bt
+
+GDB FROM THE TERMINAL
+---------------------
+    gdb ./build/talk_server
+    (gdb) run
+    (gdb) break Tasks.cpp:22       # break in dequeueTask
+    (gdb) info threads
+    (gdb) thread apply all bt      # every thread's stack - use this on a hang
+    (gdb) print tasks.size()
+    (gdb) continue
+
+    gdb --args ./build/tst/test_tasks --gtest_filter='*Fifo*'
+
+If a test or the server hangs, Ctrl-C it in gdb then run
+"thread apply all bt". A frame inside __pthread_cond_wait means a dequeue
+that nobody will ever wake - dequeueTask() blocks until a task arrives or
+terminate() is called.
+
+THREADSANITIZER
+---------------
+Catches data races even when nothing crashes. Use it for anything touching
+TaskQueue from several threads - a passing threading test only means you got
+lucky that run.
+
+    cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug \
+        -DCMAKE_CXX_FLAGS="-fsanitize=thread -g"
+    cmake --build build-tsan -j4
+    ./build-tsan/tst/test_tasks
+
+NOTES
+-----
+No npm in this project - that is JavaScript. Build is CMake, test runner is
+CTest, test framework is GoogleTest.
+
+colcon would also work (it just wraps cmake + ctest) but is not installed:
+    sudo apt install python3-colcon-common-extensions
+
+The git repo lives in ~/Talk_Project/.git - a hidden DIRECTORY, not a file.
+    ls -a ~/Talk_Project     # shows .git
+    git -C ~/Talk_Project log --oneline

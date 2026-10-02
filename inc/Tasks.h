@@ -4,6 +4,8 @@
 #include <deque>
 #include <optional>
 #include <vector>
+#include <mutex>
+#include <condition_variable>
 
 enum TASK_TYPE
 {
@@ -24,9 +26,13 @@ class TaskQueue
 public:
     void enqueueTask(TASK_TYPE type, int connectionID, std::vector<char> payload);
     std::optional<Task> dequeueTask();
+    void terminate();
 
 private:
     std::deque<Task> tasks;
+    std::mutex m;
+    std::condition_variable cv;
+    bool stopped = false;
 };
 
 #endif

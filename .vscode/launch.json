@@ -1,0 +1,89 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug talk_server",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/talk_server",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "cmake build",
+            "setupCommands": [
+                {
+                    "description": "Show std::vector/deque/optional contents instead of raw internals",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Let all threads run when resuming",
+                    "text": "set scheduler-locking off",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Debug test_tasks",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tst/test_tasks",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "cmake build",
+            "setupCommands": [
+                {
+                    "description": "Show std::vector/deque/optional contents instead of raw internals",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Debug one test (prompts for filter)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tst/test_tasks",
+            "args": ["--gtest_filter=${input:gtestFilter}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "cmake build",
+            "setupCommands": [
+                {
+                    "description": "Show std::vector/deque/optional contents instead of raw internals",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Attach to a hung process",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/talk_server",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "gtestFilter",
+            "type": "promptString",
+            "description": "GoogleTest filter, e.g. *Fifo* or TaskQueue.RoundTripsEveryField",
+            "default": "*"
+        }
+    ]
+}
