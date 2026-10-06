@@ -18,8 +18,8 @@ add_library(models src/Models.cpp)
 target_include_directories(models PUBLIC inc)
 target_link_libraries(models PUBLIC llama)
 
-add_executable(talk_server src/Server.cpp)
-target_link_libraries(talk_server PRIVATE tasks)
+add_executable(talk_server src/Server.cpp src/TaskHandler.cpp)
+target_link_libraries(talk_server PRIVATE tasks models)
 
 enable_testing()
 add_subdirectory(tst)
