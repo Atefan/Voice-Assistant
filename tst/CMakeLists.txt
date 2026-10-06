@@ -16,6 +16,11 @@ target_link_libraries(test_tasks PRIVATE tasks GTest::gtest_main)
 # take the rest of the run down with it.
 gtest_discover_tests(test_tasks)
 
+
+add_executable(test_models test_models.cpp)
+target_link_libraries(test_models PRIVATE models GTest::gtest_main)
+gtest_discover_tests(test_models)
+
 # Adding a second test file later (e.g. the threading tests):
 #
 #   add_executable(test_tasks_threading test_tasks_threading.cpp)
