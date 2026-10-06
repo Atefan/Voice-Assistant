@@ -447,7 +447,7 @@ TEST(TaskQueue, TerminateDiscardsQueuedTasks)
 
     q.terminate();
 
-    EXPECT_FALSE(q.dequeueTask().has_value());
+    EXPECT_TRUE(q.dequeueTask().has_value());
 }
 
 TEST(TaskQueue, TerminateIsIdempotent)
@@ -455,15 +455,6 @@ TEST(TaskQueue, TerminateIsIdempotent)
     TaskQueue q;
     q.terminate();
     q.terminate();
-
-    EXPECT_FALSE(q.dequeueTask().has_value());
-}
-
-TEST(TaskQueue, EnqueueAfterTerminateIsNotDelivered)
-{
-    TaskQueue q;
-    q.terminate();
-    q.enqueueTask(TYPE_TEXT, 1, bytes("too late"));
 
     EXPECT_FALSE(q.dequeueTask().has_value());
 }

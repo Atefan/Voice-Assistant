@@ -21,12 +21,9 @@ std::optional<Task> TaskQueue::dequeueTask()
     std::unique_lock lk(this->m);
     cv.wait(lk, [this]{ return !this->tasks.empty() || this->stopped; });
 
-    // when the socket says its time to go
-    if(this->stopped == true)
-        return std::nullopt;
-
+    // this->stopped == true is the exit flag
     int queueSize = this->tasks.size();
-    if(queueSize <= 0)
+    if(queueSize <= 0 && this->stopped == true)
         return std::nullopt;
 
     Task t = std::move(this->tasks.front());
