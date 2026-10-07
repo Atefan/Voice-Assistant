@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 
+// forward declaration: the header only stores a pointer, so it doesn't need whisper.h
+struct whisper_context;
+
 class LLMModel
 {
 public:
@@ -16,16 +19,17 @@ public:
     
     LLMModel();
     ~LLMModel();
-    std::string generate(std::string prompt); 
+    // grammar: GBNF rules the output is forced to follow, empty for free text
+    std::string generate(const std::string& prompt, const std::string& grammar);
 
 private:
     const std::string model_path = "/home/raspi-stef/models/Qwen_Qwen3-1.7B-Q4_K_M.gguf";
     // number of layers to offload to the GPU
     int ngl = 99;
-    // number of tokens to predict
-    int n_predict = 50;
-    // find the number of tokens in the prompt
-    int n_prompt = 50;
+    // max number of tokens the model may generate for one answer
+    int n_predict = 128;
+    // context size: prompt + answer must fit in this many tokens
+    int n_ctx = 1024;
 
     llama_model * model;
     llama_context * ctx;
@@ -38,11 +42,17 @@ public:
     STTModel(const STTModel& ) = delete;
     STTModel& operator=(const STTModel& ) = delete;
 
-    int generate(std::vector<ggml_fp16_t> prompt); 
+    std::string generate(std::vector<float> prompt);
 
-    // TODO: load the whisper model here once STT is implemented
-    STTModel() = default;
-    ~STTModel() = default;
+    STTModel();
+    ~STTModel();
+
+private:
+    const std::string model_path = "/home/raspi-stef/models/ggml-base.en.bin";
+    // number of CPU threads whisper may use
+    int n_threads = 4;
+
+    whisper_context * ctx = nullptr;
 };
 
 #endif

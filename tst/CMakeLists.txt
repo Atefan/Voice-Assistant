@@ -18,8 +18,12 @@ gtest_discover_tests(test_tasks)
 
 
 add_executable(test_models test_models.cpp)
-target_link_libraries(test_models PRIVATE models GTest::gtest_main)
+target_link_libraries(test_models PRIVATE models wav GTest::gtest_main)
 gtest_discover_tests(test_models)
+
+add_executable(test_chatml test_chatml.cpp)
+target_link_libraries(test_chatml PRIVATE chatml GTest::gtest_main)
+gtest_discover_tests(test_chatml)
 
 # Adding a second test file later (e.g. the threading tests):
 #

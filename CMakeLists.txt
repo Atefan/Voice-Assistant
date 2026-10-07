@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Threads REQUIRED)
 find_package(llama REQUIRED)
+find_package(whisper REQUIRED)
 
 add_library(tasks src/Tasks.cpp)
 target_include_directories(tasks PUBLIC inc)
@@ -16,10 +17,16 @@ target_link_libraries(tasks PUBLIC Threads::Threads)
 
 add_library(models src/Models.cpp)
 target_include_directories(models PUBLIC inc)
-target_link_libraries(models PUBLIC llama)
+target_link_libraries(models PUBLIC llama whisper)
+
+add_library(wav src/Wav.cpp)
+target_include_directories(wav PUBLIC inc)
+
+add_library(chatml src/ChatML.cpp)
+target_include_directories(chatml PUBLIC inc)
 
 add_executable(talk_server src/Server.cpp src/TaskHandler.cpp)
-target_link_libraries(talk_server PRIVATE tasks models)
+target_link_libraries(talk_server PRIVATE tasks models wav chatml)
 
 enable_testing()
 add_subdirectory(tst)
