@@ -98,3 +98,124 @@ colcon would also work (it just wraps cmake + ctest) but is not installed:
 The git repo lives in ~/Talk_Project/.git - a hidden DIRECTORY, not a file.
     ls -a ~/Talk_Project     # shows .git
     git -C ~/Talk_Project log --oneline
+
+SOCKET SERVER
+-------------
+talk_server takes no command line arguments. Which path runs is decided by the
+runDirect flag at the top of main() in src/Server.cpp:
+
+    runDirect = true    one request straight through TaskHandler, no sockets
+    runDirect = false   the socket server: listen, accept one client, serve it
+
+Both paths construct a TaskHandler, so both load Qwen (llama) and whisper
+first. Expect roughly a minute of model loading before anything happens.
+
+    ./build/talk_server
+
+With runDirect = false it prints "Server: listening on port 5555" once the
+models are up, then blocks in accept() until a client connects.
+
+ONE CLIENT PER RUN
+------------------
+connectToClient() closes the listening socket after accept() returns, so the
+server handles exactly one connection and then exits. There is no reconnect -
+restart the process for another client. The connection itself stays open
+across any number of requests.
+
+THE LAYERS
+----------
+    Sockets.cpp     bytes on an fd           knows nothing about Task
+    Protocol.cpp    Frame <-> Task           knows nothing about fds or models
+    TaskHandler     Task  -> answer string   knows nothing about the wire
+
+Turning a Task into a prompt is jsonToChatML() in ChatML.h, called from
+TaskHandler::handleText() - deliberately not in Protocol.cpp, or two files
+would decide what a prompt looks like.
+
+WIRE FORMAT (inc/Sockets.h)
+---------------------------
+    byte 0..3   uint32, network byte order   type
+    byte 4..7   uint32, network byte order   length
+    byte 8..    length bytes                 payload
+
+Request type is a TASK_TYPE: 0 = TYPE_TEXT (UTF-8 JSON payload), 1 = TYPE_AUDIO
+(raw little-endian 16-bit PCM). Replies use FRAME_TYPE_REPLY = 0xFFFFFFFF, not
+0 - TYPE_TEXT is already 0, so a reply would be indistinguishable from a text
+request. A reply payload is the JSON string TaskHandler::handle() returned.
+
+Task::connectionID is the client fd, so main replies with
+sendFrame(task.connectionID, ...). That only works because there is exactly one
+connection: fd numbers are recycled, so with several clients a queued task
+could carry a number that now belongs to someone else. Multi-client needs a
+monotonic connection id instead.
+
+THERE IS NO CLIENT YET
+----------------------
+Nothing in this project connects TO the server - only the server half is
+written. To exercise it, save this as /tmp/talk_client.py:
+
+    import socket, struct, json
+    s = socket.create_connection(("127.0.0.1", 5555)); s.settimeout(600)
+    req = {"messages": [{"role": "user", "content": "What is 2 plus 2?"}]}
+    p = json.dumps(req).encode()
+    s.sendall(struct.pack("!II", 0, len(p)) + p)          # 0 = TYPE_TEXT
+    h = s.recv(8); t, n = struct.unpack("!II", h)
+    body = b""
+    while len(body) < n: body += s.recv(n - len(body))
+    print(t, body)                                         # t = 4294967295
+    s.close()
+
+    python3 /tmp/talk_client.py
+
+netcat is not much use here - the protocol is binary and length-prefixed, so
+nc can only prove that accept() works, not that framing does.
+
+ERRORS
+------
+Everything in the socket layer throws SocketError (inc/Errors.h) rather than
+returning -1. A malformed request throws RequestError and the Listener answers
+it with {"error": ...} and keeps the connection alive; a socket failure ends
+the connection. main catches both and prints them - it never rethrows out of
+main, because an uncaught exception there calls std::terminate and ggml's
+handler buries the message under a backtrace.
+
+SOCKET DEBUGGING
+----------------
+Is it actually listening, and on which address?
+
+    ss -ltnp | grep 5555
+    # LISTEN 0 4 0.0.0.0:5555   <- all interfaces; Send-Q 4 is LISTEN_BACKLOG
+    # Recv-Q on a LISTEN row = connections waiting to be accepted
+
+    ss -tnp | grep 5555          # established connections
+    strace -f -e trace=network ./build/talk_server      # every syscall + errno
+    sudo tcpdump -i lo -X port 5555                     # the bytes on the wire
+
+"Address already in use" should not happen - SO_REUSEADDR is set before bind().
+If it does, something else really is on the port: ss -ltnp will name it.
+
+SIGPIPE kills the process on a write to a closed peer. sendAll() passes
+MSG_NOSIGNAL so it returns EPIPE instead; the launch configs also tell gdb not
+to stop on it.
+
+A hang is almost always a blocking syscall. accept() and recv() ignore
+stop_token - a std::stop_token cannot interrupt a syscall. That is why main
+calls shutdownConnection(fd) before the jthread destructor joins: shutdown()
+makes a blocked recv() return 0, while close() does NOT wake it (and frees the
+fd number for reuse, which is worse). On a hang:
+
+    (gdb) thread apply all bt
+
+Breakpoints worth having:
+
+    (gdb) break connectToClient
+    (gdb) break recvFrame
+    (gdb) print/x *(unsigned char*)header@8     # the 8 header bytes
+
+WHAT IS NOT DONE
+----------------
+    - no client half (see above)
+    - no tests for Sockets or Protocol in tst/
+    - TYPE_AUDIO works in TaskHandler but has never been driven through the
+      socket with real audio
+    - one connection per run, no reconnect, single-threaded handling

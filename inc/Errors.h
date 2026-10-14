@@ -16,4 +16,12 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// anything the socket layer cannot recover from: a failed syscall, a malformed
+// frame, a peer that vanished mid-message. what() carries strerror(errno).
+class SocketError : public std::runtime_error
+{
+public:
+    using std::runtime_error::runtime_error;
+};
+
 #endif

@@ -21,8 +21,54 @@
                     "ignoreFailures": true
                 },
                 {
-                    "description": "Let all threads run when resuming",
+                    "description": "Let all threads run when resuming (main + the Listener thread)",
                     "text": "set scheduler-locking off",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Do not stop on the SIGPIPE a closed peer causes",
+                    "text": "handle SIGPIPE nostop noprint pass",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Debug talk_server (break in connectToClient)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/talk_server",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "cmake build",
+            "setupCommands": [
+                {
+                    "description": "Show std::vector/deque/optional contents instead of raw internals",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Let all threads run when resuming (main + the Listener thread)",
+                    "text": "set scheduler-locking off",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Do not stop on the SIGPIPE a closed peer causes",
+                    "text": "handle SIGPIPE nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Skip the model load and stop where the socket work starts",
+                    "text": "break connectToClient",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "And again when the first frame arrives",
+                    "text": "break recvFrame",
                     "ignoreFailures": true
                 }
             ]
@@ -75,7 +121,14 @@
             "request": "attach",
             "program": "${workspaceFolder}/build/talk_server",
             "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb"
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Show std::vector/deque/optional contents instead of raw internals",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ],
     "inputs": [

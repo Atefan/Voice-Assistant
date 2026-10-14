@@ -25,8 +25,19 @@ target_include_directories(wav PUBLIC inc)
 add_library(chatml src/ChatML.cpp)
 target_include_directories(chatml PUBLIC inc)
 
+# Plain POSIX sockets: no third-party dependency, so this one builds and links
+# in a fraction of a second even when llama/whisper are not touched.
+add_library(sockets src/Sockets.cpp)
+target_include_directories(sockets PUBLIC inc)
+# no link deps on purpose: this layer is bytes on an fd and nothing else
+
+# Frame <-> Task, the seam between the wire and the work
+add_library(protocol src/Protocol.cpp)
+target_include_directories(protocol PUBLIC inc)
+target_link_libraries(protocol PUBLIC tasks sockets)
+
 add_executable(talk_server src/Server.cpp src/TaskHandler.cpp)
-target_link_libraries(talk_server PRIVATE tasks models wav chatml)
+target_link_libraries(talk_server PRIVATE tasks models wav chatml sockets protocol)
 
 enable_testing()
 add_subdirectory(tst)

@@ -3,6 +3,9 @@
 #include "Models.h"
 #include "Wav.h"
 #include "json.hpp"
+#include "Sockets.h"
+#include "Protocol.h"
+#include "Errors.h"
 
 #include <thread>
 #include <chrono>
@@ -38,33 +41,64 @@ json withGrammar = {
     {"grammar", TEST_GRAMMAR}
 };
 
-void Listener(std::stop_token stop_token, int timer, std::reference_wrapper<TaskQueue>TQ, std::reference_wrapper<std::exception_ptr> err)
+
+// Owns nothing: main creates the fd and closes it after this thread has joined.
+//
+// Blocks in recvFrame() until a whole frame arrives, turns it into a Task and
+// enqueues it, then goes straight back to waiting. The connection stays open
+// across requests - only a clean close by the client, or a real socket error,
+// ends the loop.
+// Takes a plain int, not the FdGuard: this thread borrows the descriptor and
+// must never close it. main owns the guard and outlives this thread.
+//
+// (Passing reference_wrapper<FdGuard> does not work the way it looks: fd.get()
+// then resolves to reference_wrapper::get(), which hands back an FdGuard&, not
+// the descriptor.)
+void Listener(std::stop_token stop_token, int fd, std::reference_wrapper<TaskQueue>TQ, std::reference_wrapper<std::exception_ptr> err)
 {
     try
-    {  
-        Task t = {.type = TYPE_TEXT, .connectionID = 0, .payload = bytes(withGrammar.dump())};
-        for(size_t i = 0; i < 10 && stop_token.stop_requested() != true; ++i)
+    {
+        while(stop_token.stop_requested() != true)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(timer));
+            std::optional<Frame> frame = recvFrame(fd);
 
-            // the connectionID is the index, so main can print which test an answer belongs to
-            std::cout << "Thread: Enqueue [" << i << "] \n";
-            TQ.get().enqueueTask(TYPE_TEXT, 0, bytes(withGrammar.dump()));
+            if(!frame)
+            {
+                std::cout << "Listener: client closed the connection\n";
+                break;
+            }
+
+            std::cout << "Listener: frame type=" << frame->type
+                      << " bytes=" << frame->payload.size() << "\n";
+
+            try
+            {
+                Task t = frameToTask(std::move(*frame), fd);
+                TQ.get().enqueueTask(t.type, t.connectionID, std::move(t.payload));
+            }
+            catch(const RequestError& e)
+            {
+                std::cerr << "Listener: rejected a frame: " << e.what() << '\n';
+
+                const json reply = {{"error", {{"type", "invalid_request"}, {"message", e.what()}}}};
+                sendFrame(fd, replyToFrame(reply.dump()));
+            }
         }
     }
     catch(...)
     {
-        std::cerr << "Exception in Listener\n" << '\n';
+        std::cerr << "Exception in Listener\n";
         err.get() = std::current_exception();
     }
-    
+
     std::cout<<"Thread ended work!\n\n";
+
     TQ.get().terminate();
 }
 
 int main(int argc, char** argv)
 {
-    const bool runDirect = true;
+    const bool runDirect = false;
 
     if(runDirect)
     {
@@ -85,27 +119,56 @@ int main(int argc, char** argv)
     {
         TaskQueue TQ;
         std::exception_ptr err;
-        try
-        {
-            TaskHandler th;
-            std::jthread trs(&Listener,0, std::ref(TQ), std::ref(err));
-            
-            
-            std::optional<Task> optNewTask;
-            while((optNewTask = TQ.dequeueTask()))
-            {
-                std::string response = th.handle(optNewTask.value());
-                std::cout << "Answer  [" << optNewTask->connectionID << "] " << response << "\n";
-            }
         
+        try
+        {   
+            // the models are loaded
+            TaskHandler th;
+            {
+                FdGuard fd = connectToClient(TALK_PORT);
+                std::jthread trs(&Listener, fd.get(), std::ref(TQ), std::ref(err));
+
+                try
+                {
+                    std::optional<Task> optNewTask;
+                    while((optNewTask = TQ.dequeueTask()))
+                    {
+                        std::string response = th.handle(optNewTask.value());
+                        std::cout << "Answer  [" << optNewTask->connectionID << "] " << response << "\n";
+
+                        sendFrame(optNewTask->connectionID, replyToFrame(response));
+                    }
+                }
+                catch(...)
+                {
+                    shutdownConnection(fd);
+                    throw;
+                }
+            }   // trs joins here, so nothing is still using fd
+        }
+        catch(const SocketError& e)
+        {
+            std::cerr << "Socket error in main: " << e.what() << '\n';
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "Error in main: " << e.what() << '\n';
         }
         catch(...)
         {
-            std::cerr << "Error in main" << '\n';
+            std::cerr << "Unknown error in main" << '\n';
         }
         
-        if(err != NULL)
-            std::rethrow_exception(err);
-            
+        if(err)
+        {
+            try
+            {
+                std::rethrow_exception(err);
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << "Error in Listener: " << e.what() << '\n';
+            }
+        }
     }
 }
